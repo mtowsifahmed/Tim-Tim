@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tim-Tim on Tablet</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem; line-height: 1.6; }
+    .connection-status { padding: 1rem; margin: 1rem 0; border-radius: 4px; }
+    .connected { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .disconnected { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    .endpoint { word-break: break-all; font-family: monospace; }
+    button { padding: 0.5rem 1rem; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>🎤 Tim-Tim on Tablet</h1>
+  
+  <div class="connection-status disconnected" id="status">Disconnected</div>
+  
+  <div class="endpoint">
+    <strong>WebSocket Endpoint:</strong><br>
+    <code>wss://tim-tim-backend.onrender.com/ws</code>
+  </div>
+  
+  <p>Connects to your Tim-Tim backend running on Render. The backend is already deployed and healthy.</p>
+  
+  <script>
+    const statusDiv = document.getElementById('status');
+    const ws = new WebSocket("wss://tim-tim-backend.onrender.com/ws");
+    
+    ws.onopen = () => {
+      statusDiv.className = "connection-status connected";
+      statusDiv.textContent = "Connected to Tim-Tim backend";
+      console.log("WebSocket connected");
+    };
+    
+    ws.onmessage = (event) => {
+      console.log("Message from backend:", event.data);
+      // Display incoming messages
+      const p = document.createElement('p');
+      p.textContent = event.data;
+      document.body.appendChild(p);
+    };
+    
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      statusDiv.className = "connection-status disconnected";
+      statusDiv.textContent = "Connection error";
+    };
+    
+    ws.onclose = () => {
+      statusDiv.className = "connection-status disconnected";
+      statusDiv.textContent = "Disconnected";
+      console.log("WebSocket closed");
+    };
+    
+    // Reconnect button
+    const connectBtn = document.createElement('button');
+    connectBtn.textContent = "Reconnect";
+    connectBtn.onclick = () => ws.reconnect();
+    document.body.appendChild(connectBtn);
+  </script>
+</body>
+</html>
