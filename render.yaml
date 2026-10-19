@@ -1,0 +1,41 @@
+# Render Blueprint: New → Blueprint → pick this repo. Render reads this file, builds the Dockerfile
+# from the project root and asks for each `sync: false` value once.
+# Free instance: 0.1 CPU / 512 MB, sleeps after 15 minutes without traffic, ~1 minute cold start.
+services:
+  - type: web
+    name: tim-tim-backend
+    runtime: docker
+    plan: free
+    region: singapore          # closest free region to India; keeps round-trips low
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # --- required: same values as backend/.env ---
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: KEY_ENCRYPTION_SECRET
+        sync: false
+      # --- optional: only needed for legacy Supabase projects / provider keys ---
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      # --- limits (safe to keep in the repo) ---
+      - key: FREE_DAILY_CAP
+        value: "30"
+      - key: PRO_ROTATION_DAILY_CAP
+        value: "100"
+      - key: ORCHESTRATOR_MODE
+        value: "auto"
