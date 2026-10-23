@@ -36,16 +36,19 @@ jobs:
           cp -r _scaffold/android android
           rm -rf _scaffold
           python3 tools/prepare_android.py
-          flutter pub get
 
-      - name: Generate Launcher Icons
+      - name: Set App Icon
         run: |
           cd mobile
-          dart run flutter_launcher_icons || echo "Launcher icon generation had warnings, continuing with default icons..."
+          # Copy the Tim-Tim logo into all Android mipmap density folders
+          for dir in android/app/src/main/res/mipmap-*; do
+            cp assets/icon.png "$dir/ic_launcher.png"
+          done
 
       - name: Build APK
         run: |
           cd mobile
+          flutter pub get
           flutter build apk --release --dart-define=APP_URL=https://tim-tim-app.onrender.com
 
       - name: Upload APK Artifact
