@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tim-Tim</title>
+<link rel="icon" type="image/png" href="app-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -33,11 +35,12 @@
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
   <symbol id="i-radar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M7.5 7.5a6.4 6.4 0 0 0 0 9M16.5 7.5a6.4 6.4 0 0 1 0 9M4.5 4.5a10.6 10.6 0 0 0 0 15M19.5 4.5a10.6 10.6 0 0 1 0 15"/></symbol>
   <symbol id="i-team" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c.8-3.6 3-5.5 6-5.5s5.2 1.9 6 5.5M16 14.6c2.6 0 4.4 1.6 5 4.4"/></symbol>
+  <symbol id="i-core" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></symbol>
 </defs></svg>
 
 <div class="shell">
   <header class="bar">
-    <div class="brand"><div class="logo"><b>T</b></div><strong>TIM-TIM</strong></div>
+    <div class="brand"><div class="logo"><img src="logo.png" alt="T" class="logo-img"></div><strong>TIM-TIM</strong></div>
     <div class="tag"><i class="dot-r"></i>YOUR AI COMPANION</div>
     <div class="grow"></div>
     <div class="dd">
@@ -104,7 +107,7 @@
     <!-- ───────── right: assistant ───────── -->
     <section class="col right">
       <div class="card assistant">
-        <div class="card-h as-h"><div class="as-logo">T</div><div class="as-t"><h3>TIM-TIM ASSISTANT</h3>
+        <div class="card-h as-h"><div class="as-logo"><img src="logo.png" alt="T" class="logo-img"></div><div class="as-t"><h3>TIM-TIM ASSISTANT</h3>
           <div class="tabs flat" id="as-tabs"><button class="on" data-tab="chat">Chat</button><button data-tab="voice">Voice</button><button data-tab="agents">Agents</button><button data-tab="notes">Notes</button></div></div>
           <button class="ibtn sm" id="spk" title="Speak replies"><svg><use href="#i-spk"/></svg></button>
           <div class="dd"><button class="ibtn sm" id="as-menu-btn"><svg><use href="#i-kebab"/></svg></button><div class="menu right" id="as-menu" hidden><button class="mi" id="clear-chat">Clear conversation</button></div></div></div>
@@ -181,7 +184,7 @@
 </div></div>
 
 <div id="gate" class="gate" hidden><div class="gate-card">
-  <div class="logo big"><b>T</b></div><h1>Welcome to Tim-Tim</h1><p id="gate-sub">Sign in with your email. We'll send you a 6-digit code.</p>
+  <img src="logo.png" class="gate-logo" alt="Tim-Tim Logo"><h1>Welcome to Tim-Tim</h1><p id="gate-sub">Sign in with your email. We'll send you a 6-digit code.</p>
   <form id="gate-email"><input type="email" id="g-email" placeholder="you@example.com" required autocomplete="email"><button class="primary wide" type="submit">Send code</button></form>
   <form id="gate-code" hidden><input type="text" id="g-code" inputmode="numeric" maxlength="8" placeholder="123456" autocomplete="one-time-code" required><button class="primary wide" type="submit">Sign in</button><button type="button" class="link" id="g-back">Use a different email</button></form>
   <div id="gate-msg" class="gate-msg"></div>
@@ -232,7 +235,9 @@
 <script src="panels.js"></script>
 <script src="extras.js"></script>
 <script src="app.js"></script>
+<script src="micsettings.js"></script>
 <script src="sources.js"></script>
 <script src="websettings.js"></script>
+<script src="mobile.js"></script>
 </body>
 </html>

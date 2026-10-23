@@ -1,42 +1,40 @@
 /* Voice layer: microphone capture (16 kHz PCM) with push-to-talk / hands-free / wake-phrase activation,
-   sentence-by-sentence audio playback with barge-in, a "thinking" filler, and a live output level. */
+   sentence-by-sentence playback with barge-in, a "thinking" filler, and a live level.
+   A recording is buffered on this PC and sent only when it ends, so clips that are too short or silent are dropped here
+   (with a hint) instead of being sent to speech recognition, which tends to invent words like "Thank you" from silence. */
 (function () {
-  const TT = window.TT, V = TT.voice = { mode: 'ptt', wake: 'hey tim', speakReplies: true, micOn: false, recording: false, playing: false, micError: '', deviceId: '', devices: [] };
-  let ctx, stream, src, proc, mute, analyser, outGain, floor = 0.004, loud = 0, quiet = 0, ring = [], recStart = 0, gotResponse = true, fillerT = null, vadHold = 0;
-  let pttHeld = false, pttGen = 0; const MIN_TAP_MS = 350;
-  let nextTime = 0, sources = new Set(), decoded = new Map(), nextSeq = 1, pendingDecode = 0, turnDone = true, meter = 0;
+  const TT = window.TT, V = TT.voice = { mode: 'ptt', wake: 'hey tim', speakReplies: true, micOn: false, recording: false, playing: false, micError: '', micLabel: '',
+    deviceId: (() => { try { return localStorage.getItem('timtim.mic') || ''; } catch (_) { return ''; } })(),
+    keepWarm: (() => { try { return localStorage.getItem('timtim.micwarm') !== '0'; } catch (_) { return true; } })() };
+  const MIN_SECONDS = 0.4, MIN_PEAK = 0.012;
+  let ctx, stream, src, proc, mute, analyser, outGain, floor = 0.004, loud = 0, quiet = 0, ring = [], utt = [], uttSamples = 0, uttPeak = 0, recStart = 0;
+  let gotResponse = true, fillerT = null, pttWanted = false, idleT = null, meter = 0, lastPeak = 0, nextTime = 0, sources = new Set(), decoded = new Map(), nextSeq = 1, pendingDecode = 0, turnDone = true;
 
   async function audio() { if (!ctx) { ctx = new (window.AudioContext || window.webkitAudioContext)(); outGain = ctx.createGain(); analyser = ctx.createAnalyser(); analyser.fftSize = 512; outGain.connect(analyser); analyser.connect(ctx.destination); } if (ctx.state !== 'running') await ctx.resume(); return ctx; }
 
   // ───────── microphone ─────────
-  V.startMic = async () => {
-    if (V.micOn) return true;
-    try {
-      await audio();
-      const audio_constraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 };
-      // Lock onto the microphone the user picked; if that device vanished, fall back to the default one.
-      try { stream = await navigator.mediaDevices.getUserMedia({ audio: V.deviceId ? { ...audio_constraints, deviceId: { exact: V.deviceId } } : audio_constraints }); }
-      catch (e) { if (!V.deviceId || e.name !== 'OverconstrainedError') throw e; stream = await navigator.mediaDevices.getUserMedia({ audio: audio_constraints }); }
-    } catch (e) { V.micError = e.name === 'NotAllowedError' ? 'Microphone permission was denied.' : 'No microphone available.'; TT.emit('mic', { error: V.micError }); return false; }
-    src = ctx.createMediaStreamSource(stream); proc = ctx.createScriptProcessor(4096, 1, 1); mute = ctx.createGain(); mute.gain.value = 0;
-    proc.onaudioprocess = onFrame; src.connect(proc); proc.connect(mute); mute.connect(ctx.destination); V.micOn = true; V.micError = ''; TT.emit('mic', { on: true });
-    listDevices(); return true;
-  };
-
-  // Names are only readable after the user has granted microphone access once.
-  V.listDevices = listDevices;
-  async function listDevices() {
-    try {
-      const all = await navigator.mediaDevices.enumerateDevices();
-      V.devices = all.filter(d => d.kind === 'audioinput').map(d => ({ id: d.deviceId, label: d.label || 'Microphone ' + (d.deviceId.slice(0, 4) || '?') }));
-      TT.emit('micdevices', V.devices);
-    } catch (_) {}
+  async function openStream() {
+    const base = { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 };
+    try { return await navigator.mediaDevices.getUserMedia({ audio: V.deviceId ? { ...base, deviceId: { exact: V.deviceId } } : base }); }
+    catch (e) {
+      if (V.deviceId && (e.name === 'OverconstrainedError' || e.name === 'NotFoundError')) {          // the saved microphone is gone: use the default one
+        V.deviceId = ''; try { localStorage.removeItem('timtim.mic'); } catch (_) {}
+        return navigator.mediaDevices.getUserMedia({ audio: base });
+      }
+      throw e;
+    }
   }
-  V.setDevice = id => {
-    V.deviceId = id || '';
-    if (V.micOn) { const was = V.recording; V.stopMic(); if (was) TT.emit('toast', 'Microphone changed.'); }
+  V.startMic = async () => {
+    clearTimeout(idleT); if (V.micOn) return true;
+    try { await audio(); stream = await openStream(); }
+    catch (e) { V.micError = e.name === 'NotAllowedError' || e.name === 'SecurityError' ? 'Microphone permission was denied. Allow it for this app and try again.' : e.name === 'NotFoundError' ? 'No microphone was found. Plug one in or pick another in Voice → Microphone.' : 'The microphone could not be started (' + (e.name || 'error') + ').'; TT.emit('mic', { error: V.micError }); return false; }
+    const track = stream.getAudioTracks()[0]; V.micLabel = track ? track.label : '';
+    if (track) { track.onended = () => { V.stopMic(); V.micError = 'The microphone was disconnected.'; TT.emit('mic', { error: V.micError }); }; track.onmute = () => TT.emit('mic', { muted: true }); track.onunmute = () => TT.emit('mic', { muted: false }); }
+    src = ctx.createMediaStreamSource(stream); proc = ctx.createScriptProcessor(4096, 1, 1); mute = ctx.createGain(); mute.gain.value = 0;
+    proc.onaudioprocess = onFrame; src.connect(proc); proc.connect(mute); mute.connect(ctx.destination); V.micOn = true; V.micError = ''; TT.emit('mic', { on: true }); return true;
   };
-  V.stopMic = () => { if (!V.micOn) return; try { proc.disconnect(); src.disconnect(); stream.getTracks().forEach(t => t.stop()); } catch (_) {} V.micOn = false; if (V.recording) cancelUtterance(); pttHeld = false; pttGen++; TT.emit('mic', { on: false }); };
+  V.stopMic = () => { clearTimeout(idleT); if (!V.micOn) return; try { proc.disconnect(); src.disconnect(); stream.getTracks().forEach(t => t.stop()); } catch (_) {} V.micOn = false; ring = []; if (V.recording) { V.recording = false; utt = []; TT.emit('rec', { on: false }); } TT.emit('mic', { on: false }); };
+  const scheduleIdleClose = () => { clearTimeout(idleT); if (V.mode === 'ptt' && !V.keepWarm && V.micOn) idleT = setTimeout(() => { if (!V.recording) V.stopMic(); }, 15000); };
 
   function pcm16k(f) {
     const ratio = ctx.sampleRate / 16000, n = Math.floor(f.length / ratio), out = new Int16Array(n);
@@ -44,9 +42,13 @@
     return out;
   }
   function onFrame(e) {
-    const f = e.inputBuffer.getChannelData(0); let sum = 0; for (let i = 0; i < f.length; i++) sum += f[i] * f[i];
-    const rms = Math.sqrt(sum / f.length); meter = rms; const chunk = pcm16k(f);
-    if (V.recording) { TT.net.sendBinary(chunk.buffer); if (V.mode !== 'ptt') { if (rms < Math.max(0.012, floor * 2.5)) { quiet++; if (quiet * f.length / ctx.sampleRate > 0.95) endUtterance(); } else quiet = 0; } if (Date.now() - recStart > 58000) endUtterance(); return; }
+    const f = e.inputBuffer.getChannelData(0); let sum = 0, pk = 0; for (let i = 0; i < f.length; i++) { const x = f[i]; sum += x * x; const a = x < 0 ? -x : x; if (a > pk) pk = a; }
+    const rms = Math.sqrt(sum / f.length); meter = rms; lastPeak = pk; const chunk = pcm16k(f); chunk.peak = pk;
+    if (V.recording) {
+      utt.push(chunk); uttSamples += chunk.length; if (pk > uttPeak) uttPeak = pk;
+      if (V.mode !== 'ptt') { if (rms < Math.max(0.012, floor * 2.5)) { quiet++; if (quiet * f.length / ctx.sampleRate > 0.95) endUtterance(); } else quiet = 0; }
+      if (Date.now() - recStart > 58000) endUtterance(); return;
+    }
     ring.push(chunk); if (ring.length > 5) ring.shift();
     if (V.mode === 'ptt' || TT.paused) return;
     floor = floor * 0.97 + rms * 0.03 * (loud ? 0 : 1);
@@ -56,39 +58,49 @@
 
   function beginUtterance(withPre) {
     if (V.recording || TT.paused) return;
-    if (V.playing || !turnDone) V.interrupt();                                                    // barge-in
-    V.recording = true; quiet = 0; recStart = Date.now(); TT.net.send({ type: 'audio_start' });
-    if (withPre) ring.forEach(c => TT.net.sendBinary(c.buffer)); ring = []; TT.emit('rec', { on: true });
+    if (V.playing || !turnDone) V.interrupt();                                                    // barge-in: stop talking the moment you speak
+    V.recording = true; quiet = 0; recStart = Date.now();
+    utt = withPre ? ring.slice() : []; uttSamples = utt.reduce((n, c) => n + c.length, 0); uttPeak = utt.reduce((m, c) => Math.max(m, c.peak || 0), 0); ring = [];
+    TT.emit('rec', { on: true });
   }
   function endUtterance() {
-    if (!V.recording) return; V.recording = false;
+    if (!V.recording) return; V.recording = false; TT.emit('rec', { on: false });
+    const secs = uttSamples / 16000, peak = uttPeak, chunks = utt; utt = []; uttSamples = 0; uttPeak = 0; scheduleIdleClose();
+    const held = (Date.now() - recStart) / 1000;                                                    // the pre-roll doesn't count: judge how long the key was really held
+    if (secs < MIN_SECONDS || (V.mode === 'ptt' && held < 0.3)) { TT.emit('rec_discard', { reason: 'short', secs: held }); return; }
+    if (peak < MIN_PEAK) { TT.emit('rec_discard', { reason: 'quiet', peak }); return; }
+    if (!TT.net.ready()) { TT.emit('rec_discard', { reason: 'offline' }); return; }
+    TT.net.send({ type: 'audio_start' });
+    const all = new Int16Array(uttSamples = chunks.reduce((n, c) => n + c.length, 0)); let o = 0; chunks.forEach(c => { all.set(c, o); o += c.length; }); uttSamples = 0;
+    for (let i = 0; i < all.length; i += 16000) TT.net.sendBinary(all.slice(i, i + 16000).buffer);
     TT.net.send({ type: 'audio_end', ...(V.mode === 'wake' ? { wake: V.wake } : {}) });
-    gotResponse = false; turnDone = false; TT.emit('rec', { on: false }); clearTimeout(fillerT); fillerT = setTimeout(() => { if (!gotResponse) V.filler(); }, 1000);
+    gotResponse = false; turnDone = false; clearTimeout(fillerT); fillerT = setTimeout(() => { if (!gotResponse) V.filler(); }, 1000);
   }
-  // Throw the clip away instead of sending it: silence is what makes the speech model invent "thank you".
-  function cancelUtterance() {
-    if (!V.recording) return; V.recording = false;
-    TT.net.send({ type: 'audio_cancel' }); ring = []; quiet = 0; TT.emit('rec', { on: false });
-  }
+
+  /* Push-to-talk. If you let go while the microphone is still starting (first use, permission prompt) nothing gets stuck recording. */
   V.pttStart = async () => {
-    if (TT.paused) return false;
-    pttHeld = true; const gen = ++pttGen;
-    if (!(await V.startMic())) return false;
-    // The key may have been released while the microphone was still opening: never start a clip nobody is holding.
-    if (gen !== pttGen || !pttHeld) return false;
-    if (V.recording) return true;
-    beginUtterance(false); return true;
+    if (TT.paused) return; pttWanted = true;
+    if (!(await V.startMic())) { pttWanted = false; return; }
+    if (!pttWanted) { TT.emit('rec_discard', { reason: 'notready' }); return; }           // let go before the microphone finished starting
+    if (V.recording) return;
+    beginUtterance(true);                                                                         // includes the last fraction of a second so the first word isn't clipped
   };
-  V.pttStop = () => {
-    pttHeld = false; pttGen++;
-    if (!V.recording) return;                                   // released before the mic opened: nothing was sent
-    if (Date.now() - recStart < MIN_TAP_MS) { cancelUtterance(); TT.emit('toast', 'Hold Space while you speak.'); return; }
-    endUtterance();
-  };
-  V.setMode = async m => { V.mode = m; pttHeld = false; pttGen++; if (m === 'ptt') { if (V.recording) cancelUtterance(); } else await V.startMic(); TT.emit('voicemode', m); };
+  V.pttStop = () => { pttWanted = false; if (V.recording) endUtterance(); else scheduleIdleClose(); };
+  V.setMode = async m => { V.mode = m; if (m === 'ptt') { if (V.recording) endUtterance(); scheduleIdleClose(); } else await V.startMic(); TT.emit('voicemode', m); };
+  V.setKeepWarm = async on => { V.keepWarm = !!on; try { localStorage.setItem('timtim.micwarm', on ? '1' : '0'); } catch (_) {} if (on && V.mode === 'ptt') await V.startMic(); else scheduleIdleClose(); };
   V.noteResponse = () => { gotResponse = true; clearTimeout(fillerT); };
   V.turnStarted = () => { turnDone = false; gotResponse = false; };
   V.turnFinished = () => { turnDone = true; checkEnd(); };
+
+  // ───────── devices + test ─────────
+  V.listDevices = async () => { try { return (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput'); } catch (_) { return []; } };
+  V.setDevice = async id => { V.deviceId = id || ''; try { id ? localStorage.setItem('timtim.mic', id) : localStorage.removeItem('timtim.mic'); } catch (_) {} if (V.micOn) { V.stopMic(); await V.startMic(); } };
+  V.testMic = async (ms = 2500) => {
+    if (!(await V.startMic())) return { ok: false, error: V.micError };
+    let peak = 0; const t0 = Date.now();
+    await new Promise(res => { const iv = setInterval(() => { peak = Math.max(peak, lastPeak); if (Date.now() - t0 > ms) { clearInterval(iv); res(); } }, 40); });
+    scheduleIdleClose(); return { ok: true, peak, label: V.micLabel };
+  };
 
   // ───────── playback ─────────
   V.onAudio = async ({ meta, bytes }) => {

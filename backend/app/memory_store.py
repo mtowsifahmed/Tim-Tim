@@ -2,6 +2,7 @@
 by keywords otherwise. All access is scoped by user_id; clients never touch the table directly."""
 from __future__ import annotations
 
+import asyncio
 import re
 
 from . import db
@@ -10,6 +11,7 @@ from .providers.errors import ProviderError
 from .providers.rotation import Rotation
 
 MAX_FACTS = 500
+SMALL = 12
 SCOPES = {"global", "research", "coding", "creative", "planner"}
 _STOP = {"the", "a", "an", "is", "are", "to", "of", "and", "or", "my", "i", "you", "me", "it", "in", "on", "for", "what", "do"}
 
@@ -64,8 +66,18 @@ async def list_facts(user_id: str, q: str = "") -> list[dict]:
 
 
 async def search(rot: Rotation, user_id: str, query: str, scopes: list[str], k: int = 6) -> list[str]:
-    """Relevant facts for the current message, limited to the scopes this agent may see."""
-    v = await embed_text(rot, query)
+    """Relevant facts for the current message, limited to the scopes this agent may see.
+    Fast path: with a handful of facts we just return them all (no embedding call = a quicker first word)."""
+    rows = await db.pool().fetch("select fact from public.memory_facts where user_id=$1 and scope=any($2::text[]) order by created_at desc limit $3",
+                                 user_id, scopes, SMALL + 1)
+    if 0 < len(rows) <= SMALL:
+        return [r["fact"] for r in rows]
+    if not rows:
+        return []
+    try:
+        v = await asyncio.wait_for(embed_text(rot, query), 1.5)
+    except asyncio.TimeoutError:
+        v = None
     if v:
         rows = await db.pool().fetch(
             "select fact from public.memory_facts where user_id=$1 and scope=any($2::text[]) and embedding is not null "

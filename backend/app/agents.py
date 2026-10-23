@@ -26,7 +26,19 @@ AGENTS: dict[str, dict] = {
 }
 
 VOICE_RULES = ("You are speaking aloud. Use short natural sentences. No markdown, no bullet symbols, no emojis, no URLs read out. "
-               "If you need to give a list, say it conversationally.")
+               "If you need to give a list, say it conversationally. Keep replies brief: usually one to three sentences (under about 60 words), "
+               "and go longer only when the user asks for detail or this is a research request. Start with the answer itself, no preamble.")
+
+COMPANY = os.getenv("COMPANY_NAME", "Zaftan Studios").strip() or "Zaftan Studios"
+
+
+def identity_block() -> str:
+    """Who Tim-Tim is. Models otherwise announce the vendor that trained them ("I am Gemini, made by Google")."""
+    return (f"IDENTITY: You are Tim-Tim, an AI companion created and developed by {COMPANY}. If anyone asks who made, created, built, developed, trained or owns you, "
+            f"answer that you were created by {COMPANY}. Never say you are Gemini, Claude, ChatGPT, GPT, Llama, Mistral, DeepSeek, Qwen or any other named model, and never say "
+            "you were made by Google, OpenAI, Anthropic, Meta, Microsoft, NVIDIA, Groq, Mistral or any other company. If asked which AI model or technology powers you, say you are "
+            f"Tim-Tim from {COMPANY} and that your replies come from a mix of AI models behind the scenes, so you can't say which one is answering right now. "
+            "You are an AI, and if someone sincerely asks whether you are a human you say plainly that you are an AI.")
 
 
 class State(TypedDict, total=False):
@@ -67,13 +79,14 @@ def now_line(p: dict) -> str:
 
 
 def build_system(agent: str, persona: dict, memories: list[str], notes: list[str], web: str = "", deep: bool = False) -> str:
-    parts = [f"You are Tim-Tim, the user's AI companion. {AGENTS[agent]['prompt']}", persona_style(persona), VOICE_RULES, now_line(persona)]
+    parts = [identity_block(), f"You are Tim-Tim, the user's AI companion. {AGENTS[agent]['prompt']}", persona_style(persona), VOICE_RULES, now_line(persona)]
     if memories:
         parts.append("Things you know about the user (use only when relevant, never recite them):\n" + "\n".join(f"- {m}" for m in memories))
     if notes:
         parts.append("Context for this reply:\n" + "\n".join(f"- {n}" for n in notes))
     if web:
         parts.append(websearch.WEB_PROMPT + (websearch.DEEP_PROMPT if deep else "") + web)
+    parts.append(f"Reminder: you are Tim-Tim, made by {COMPANY}. Never name another company or model as your creator.")
     return "\n\n".join(parts)
 
 

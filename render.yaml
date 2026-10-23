@@ -39,3 +39,23 @@ services:
         value: "100"
       - key: ORCHESTRATOR_MODE
         value: "auto"
+
+# The web + phone app: plain static files, free, no sleeping. After the first deploy, put its address in desktop/src/config.js (WEB_URL).
+  - type: web
+    name: tim-tim-app
+    runtime: static
+    staticPublishPath: ./desktop/src
+    autoDeploy: true
+    headers:
+      - path: /sw.js
+        name: Cache-Control
+        value: no-cache
+      - path: /manifest.webmanifest
+        name: Cache-Control
+        value: no-cache
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin

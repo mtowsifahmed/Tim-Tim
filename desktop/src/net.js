@@ -7,7 +7,8 @@
   TT.emit = (t, d) => { (handlers[t] || []).forEach(f => { try { f(d); } catch (e) { console.error(t, e); } }); };
 
   let ws = null, want = false, retry = 0, retryTimer = null, hb = null, pingAt = 0, pendingAudio = null;
-  const net = TT.net = { url: '', device: 'desktop', latency: null };
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (window.innerWidth <= 820);
+  const net = TT.net = { url: '', device: isMobile ? 'mobile' : 'desktop', latency: null };
   net.http = () => net.url.replace(/^ws/, 'http').replace(/\/ws$/, '');
   net.ready = () => !!ws && ws.readyState === 1 && net.authed;
   net.send = o => { if (net.ready()) { ws.send(JSON.stringify(o)); return true; } return false; };

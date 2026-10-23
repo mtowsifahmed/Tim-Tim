@@ -108,7 +108,14 @@
     try { const { actions } = await net.api('/automation'); TT.actions.hist = actions; } catch (_) {} });
 
   // ───────── chat events ─────────
-  TT.on('turn_start', m => { turnActive = true; gotOutput = false; streaming = false; bubble = null; V.turnStarted(); if (m.origin === 'mobile') msg('u', m.text + '  (from phone)'); });
+  TT.on('turn_start', m => {
+    turnActive = true; gotOutput = false; streaming = false; bubble = null; V.turnStarted();
+    if (m.origin === 'mobile' && net.device !== 'mobile') msg('u', m.text + '  (from phone)');
+    else if (m.origin === 'desktop' && net.device === 'mobile') msg('u', m.text + '  (from desktop)');
+    if (document.body.dataset.mobilePanel && document.body.dataset.mobilePanel !== 'chat') {
+      const b = $('#chat-badge'); if (b) b.hidden = false;
+    }
+  });
   TT.on('transcript', m => { msg('u', m.text); });
   TT.on('agent', m => { if (m.status === 'working') agentUI(m.id, 'working', m.task); else if (m.status === 'done') { agentUI(m.id, 'done', 'Done'); setTimeout(() => agentUI(m.id, 'idle'), 2500); } });
   TT.on('token', m => { gotOutput = true; streaming = true; V.noteResponse(); if (!bubble) { bubble = msg('a', ''); bubble.classList.add('typing'); } bubble.querySelector('.bub').textContent += m.text; log.scrollTop = log.scrollHeight; });

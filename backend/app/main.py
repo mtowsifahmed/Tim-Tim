@@ -11,6 +11,7 @@ from .hub import Hub
 from .providers.rotation import Rotation
 from .routes import admin, automation, keys, me, memory, pair, search, settings, world
 from .ws import handle_session
+from . import speed  # noqa: F401  (faster replies: provider order + short caches)
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
