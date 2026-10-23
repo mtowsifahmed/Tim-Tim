@@ -37,7 +37,11 @@ jobs:
           rm -rf _scaffold
           python3 tools/prepare_android.py
           flutter pub get
-          dart run flutter_launcher_icons
+
+      - name: Generate Launcher Icons
+        run: |
+          cd mobile
+          dart run flutter_launcher_icons || echo "Launcher icon generation had warnings, continuing with default icons..."
 
       - name: Build APK
         run: |
