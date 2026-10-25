@@ -12,6 +12,7 @@ desktop/src-tauri/gen/
 mobile/build/
 mobile/_scaffold/
 mobile/android/local.properties
+.flutter-plugins*
 release/
 .env.*
 !.env.example

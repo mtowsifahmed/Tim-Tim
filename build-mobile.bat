@@ -20,7 +20,7 @@ if not exist android (
 )
 py -3 tools\prepare_android.py 2>nul || python tools\prepare_android.py
 call flutter pub get || ( pause & exit /b 1 )
-call dart run flutter_launcher_icons
+for /d %%d in (android\app\src\main\res\mipmap-*) do copy /y assets\icon.png "%%d\ic_launcher.png" >nul
 call flutter build apk --release --dart-define=APP_URL=%APP_URL% || ( echo. & echo BUILD FAILED. Copy the last 30 lines above and send them to your developer. & pause & exit /b 1 )
 if not exist "..\release" mkdir "..\release"
 copy /y "build\app\outputs\flutter-apk\app-release.apk" "..\release\Tim-Tim.apk" >nul
