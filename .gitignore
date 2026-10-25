@@ -1,3 +1,4 @@
+# Existing ignore patterns (keep them if you need them)
 .env
 *.pyc
 __pycache__/
@@ -16,3 +17,6 @@ mobile/android/local.properties
 release/
 .env.*
 !.env.example
+
+# Ignore the nested Tim‑Tim by claude folder
+Tim‑Tim by claude/
